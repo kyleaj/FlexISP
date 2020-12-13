@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import imutils
-from Utils import get_bayer_decimation_matrix, flatten_by_channel, un_flatten_by_channel, get_identity_like, get_init_demosaic
+from Utils import get_super_res_shrink_matrix, flatten_by_channel, un_flatten_by_channel, get_identity_like, get_init_super_res
 from scipy import sparse
 from scipy.sparse import linalg
 from scipy import signal
@@ -12,13 +12,13 @@ iters = 10
 im = imutils.resize(cv2.imread("Test Images/tampa.jpg"), height=300)
 im = im[:300, :300, :]
 
-A = get_bayer_decimation_matrix(im)
+super_shape = (600, 600, 3)
 
 z = flatten_by_channel(im).astype(np.float)/255.0
 
-z = A@z
-
-x_bar = x = flatten_by_channel(get_init_demosaic(im)) / 255.0
+up_im = get_init_super_res(im)
+x_bar = x = flatten_by_channel(up_im) / 255.0
+A = get_super_res_shrink_matrix(up_im)
 
 phi0 = 0.1
 phi1 = 1
@@ -27,7 +27,7 @@ n = 0.002
 
 def K0(x): #gradient
 
-    x = un_flatten_by_channel(x, im.shape)
+    x = un_flatten_by_channel(x, super_shape)
 
     GradX = np.array([[-1, 1, 0]])
     GradY = GradX.T
@@ -44,8 +44,8 @@ def K1(x):
     return x
 
 def K0_transpose(x): # transpose gradient op
-    x1 = un_flatten_by_channel(x[:, 0], im.shape)
-    x2 = un_flatten_by_channel(x[:, 1], im.shape)
+    x1 = un_flatten_by_channel(x[:, 0], super_shape)
+    x2 = un_flatten_by_channel(x[:, 1], super_shape)
 
     GradX = np.array([[-1, 1, 0]]).T
     GradY = GradX.T
@@ -79,7 +79,7 @@ def NLMProx(v):
     v = v * 255
     v = v.astype(np.uint8)
 
-    v = un_flatten_by_channel(v, im.shape)
+    v = un_flatten_by_channel(v, super_shape)
 
     #cv2.imshow("Before NLM", v)
 
@@ -118,6 +118,9 @@ def data_fidelity_op():
 
     v = x - (tau*apply_K_transpose(y))
 
+    print(z.shape)
+    print(A.T.shape)
+
     right = A.T@z
     right = right*tau/n
     right = right + v
@@ -138,7 +141,7 @@ for _ in range(iters):
     print(x.max())
     print()
 
-    reconstructed_im = un_flatten_by_channel(x, im.shape)
+    reconstructed_im = un_flatten_by_channel(x, super_shape)
     reconstructed_im = (reconstructed_im-reconstructed_im.min())/(reconstructed_im.max()-reconstructed_im.min())
     reconstructed_im = reconstructed_im * 255
     reconstructed_im[reconstructed_im < 0] = 0

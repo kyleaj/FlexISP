@@ -17,6 +17,15 @@ def un_flatten_by_channel(x, shape):
 
     return cv2.merge((r, g, b))
 
+def un_flatten_by_channel_super_res(x, shape):
+    c_len = shape[0]*shape[1]
+    print(c_len)
+    r = x[0:c_len].reshape(shape[0:2])
+    g = x[c_len:2*c_len].reshape(shape[0:2])
+    b = x[2*c_len:].reshape(shape[0:2])
+
+    return cv2.merge((r, g, b))
+
 def get_bayer_decimator(x):
     r_channel = np.zeros(x.shape)
     r_channel[1::2, 1::2, 0] = 1
@@ -108,3 +117,75 @@ def get_init_demosaic(A):
     cv2.waitKey(0)
 
     return a
+
+def get_super_res_shrink_matrix(x):
+    # Construct A, which selects bottom right of each quad of pixels
+    data = []
+    rows = []
+    cols = []
+
+    curr_row = 0
+
+    h, w, c = x.shape
+    # First the reds
+    i = 0
+    while i < h:
+        i = i + 1 # Odd rows
+        j = 0
+        while j < w:
+            j = j + 1 # odd columns
+            data.append(1)
+            rows.append(curr_row)
+            cols.append((w*i)+j)
+            curr_row = curr_row + 1
+            j = j + 1
+        i = i + 1
+
+    # Greens
+    i = 0
+    while i < h:
+        i = i + 1
+        j = 0
+        while j < w:
+            j = j + 1 # odd columns
+            data.append(1)
+            rows.append(curr_row)
+            cols.append((w*i)+j+h*w)
+            curr_row = curr_row + 1
+            j = j + 1
+        i = i + 1
+
+    # Blues
+    i = 0
+    while i < h:
+        i = i + 1
+        j = 0
+        while j < w:
+            j = j + 1 # odd columns
+            data.append(1)
+            rows.append(curr_row)
+            cols.append((w*i)+j+h*w*2)
+            curr_row = curr_row + 1
+            j = j + 1
+        i = i + 1
+    
+    return sparse.coo_matrix((data, (rows, cols)), (h*w*c//4, h*w*c))
+
+def get_init_super_res(x):
+    a = cv2.resize(x, (x.shape[0]*2, x.shape[1]*2))
+    cv2.imshow("Init guess", a)
+    cv2.waitKey(0)
+    return a
+
+'''
+a = np.arange(12*2*2).reshape((4,4,3))
+shrink = get_super_res_shrink_matrix(a)
+
+print(a)
+#print(flatten_by_channel(a))
+print(shrink.todense()@flatten_by_channel(a))
+res = shrink.todense()@flatten_by_channel(a)
+res = res.flatten()[0,:].T
+print(res.shape)
+print(un_flatten_by_channel(res, (2,2)))
+'''
