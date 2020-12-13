@@ -27,6 +27,19 @@ class FlexISP:
 
         return (dX, dY)
 
+    def grad_transpose(self, v):
+        #return v[:,0] + v[:,1]
+        GradX = np.array([[-1, 1, 0]])
+        GradY = GradX.T
+
+        vx = un_flatten_by_channel(v[:,0],self.shape)
+        vy = un_flatten_by_channel(v[:,1],self.shape)
+
+        dX = cv2.filter2D(vx, -1, GradX.T, borderType=cv2.BORDER_REPLICATE)
+        dY = cv2.filter2D(vy, -1, GradY.T, borderType=cv2.BORDER_REPLICATE)        
+
+        return flatten_by_channel(dX) + flatten_by_channel(dY)
+
     def L1_norm_prox(self, v, thresh):
         v_sign = np.sign(v)
         v = np.abs(v) - thresh
@@ -39,14 +52,19 @@ class FlexISP:
 
         dX, dY = self.grad(x)
 
-        vX = y + (self.gamma*flatten_by_channel(dX))
-        vY = y + (self.gamma*flatten_by_channel(dY))
+        dX = flatten_by_channel(dX)
+        dY = flatten_by_channel(dY)
 
-        v = (vX+vY)/self.gamma #np.abs(vX) + np.abs(vY)
+        D = np.concatenate((dX[:,np.newaxis], dY[:,np.newaxis]), axis=1)
+
+        v = y + (self.gamma*D)
+        v_orig = v
+
+        v = v/self.gamma
 
         v = self.L1_norm_prox(v, 1/self.gamma)
 
-        return (vX+vY) - self.gamma*v
+        return v_orig - self.gamma*v
 
     def NLM(self, x, y):
         v = y + (self.gamma*x)
@@ -68,11 +86,14 @@ class FlexISP:
 
     def penalty(self, x, y):
         #return self.totalVariation(x, y)*0.1 + self.NLM(x,y) + self.crossChannel(x,y)
-        return self.totalVariation(x,y)*0.01 + self.NLM(x,y)*0.01
+        return self.totalVariation(x,y)*0.1
+
+    def applyKTranspose(self, y):
+        return self.grad_transpose(y)
+    
 
     def data_fidelity(self, x, y, z):
-        #v = x - self.t@self.K.T@y
-        v = x - self.t*y # with just nlm, k is identity
+        v = x - self.t*self.applyKTranspose(y)
 
         left = self.A.T@self.A
         left = self.t/self.n*left
@@ -94,7 +115,7 @@ class FlexISP:
         # For debugging
         answer = flatten_by_channel(z)
         z = self.A@flatten_by_channel(z)
-        y = np.zeros_like(x)
+        y = 0
 
         print("Starting iterations...")
 
@@ -108,6 +129,4 @@ class FlexISP:
             cv2.imshow("intermediate", un_flatten_by_channel(out.astype(np.uint8), self.shape))
             cv2.waitKey(100)
             print((((out/255.0)**2 + (answer**2))**0.5).sum())
-
-
         return x

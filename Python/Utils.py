@@ -85,3 +85,26 @@ def get_bayer_decimation_matrix(x):
         i = i + 2 # Even rows 
     
     return sparse.coo_matrix((data, (rows, cols)), (h*w, h*w*c))
+
+def get_identity_like(A):
+    data = [1] * A.shape[0]
+    rows = cols = np.arange(start=0, stop=A.shape[0])
+
+    return sparse.coo_matrix((data, (rows, cols)), A.shape)
+
+def get_init_demosaic(A):
+    kernel = np.ones((3,3))
+
+    decim = get_bayer_decimator(A)
+
+    A = A*decim
+
+    a = cv2.filter2D(A, -1, kernel, borderType=cv2.BORDER_CONSTANT)
+    b = cv2.filter2D(decim, -1, kernel, borderType=cv2.BORDER_CONSTANT)
+
+    a = (a.astype(float) / b.astype(float)).astype(np.uint8)
+
+    cv2.imshow("Init guess", a)
+    cv2.waitKey(0)
+
+    return a
